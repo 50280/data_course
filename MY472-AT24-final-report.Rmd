@@ -1,0 +1,1351 @@
+---
+title: "Democracy in the Hands of Children: The Impact of Biases in Generative AI on Children’s Understanding of Democratic Participation"
+author: "Candidate Number: 50280"
+date: "28.01.2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Prompt: 1**
+
+**ChatGPT/AI disclosure statement:** Chat GPT or Copilot were used sparingly to produce single lines of code that address specific errors encountered. These are disclosed with comments starting with: ##\*.
+
+## 1. AI Biases, Children, and Democratic Participation: An Introduction.
+
+With the rise of generative AI, new generations are growing up with personalised answers to every imaginable question at their fingertips. For children, who are still developing critical thinking skills, biases in AI can shape their understanding of important concepts like democratic participation. At the European Policy Centre, we are committed to aligning AI development with the EU AI Act’s emphasis on understanding and addressing risks in AI models. Thus, we collected large volumes of text and image outputs from AI models in response to queries designed to reflect the understanding of democratic participation for children from different EU countries, and of different developmental stages. By analysing these AI-generated responses, we hope to understand and quantify biases in such models, and thereby foster future policy improvements and implementations of the EU AI act.
+
+**General setup:** If future users wish to regenerate the data, a free HuggingFace account [here](https://huggingface.co/welcome) and access token must be created. If you do not wish to rescrape, set the to_scrape toggle below to false, and the data will be downloaded to the working directory you set through [this dropbox link](https://www.dropbox.com/scl/fo/i7dvz8cv3ln0ee74zzane/APwyVBOuEvOP950lky0Am0A?rlkey=9nysqfziz5nw9vvcc4t0052nu&st=jj1zfj1y&dl=1). The code is designed to generate each output once; outputs are not regenerated if they already exist.
+
+```{r general_setup, message=FALSE, warning=FALSE, results='hide'}
+
+# Code written on: 
+# - R Version: 4.3.1.
+# - Computer: MacBook Pro 14" with Apple M1 chip, 16 GB Memory, 2021 Model. 
+# - OS System: macOS Sequoia Version 15.0.1.
+
+# Contact Anonymous Student if you have any questions/comments: a.student@lse.ac.uk.
+
+################################################################################
+# Before you run this script...
+################################################################################
+
+# (1) Clear the working space. 
+rm(list = ls())
+
+# (2) This toggle enables you to decide whether you want to rescrape the data
+# collected in this project. TRUE = rescrape; FALSE = do not rescrape. 
+to_scrape <- FALSE
+
+# (3) Set the toggle below to TRUE if you want to save the different outputs
+# computed in this project, and FALSE if you do not want to save these outputs. 
+to_save <- TRUE
+
+# (4) Set your working directory and save it to the object below, or replace getwd() 
+# with the path to the output directory where you want to save your data. 
+wdir <- getwd()
+
+################################################################################
+# IF YOU DO NOT WANT TO RESCRAPE THE DATA: download the data to wdir. 
+################################################################################
+
+# In case there are any issues with the Dropbox link below, the following google drive link has
+# been created as a backup: https://drive.google.com/drive/folders/1Rol9c29KDCPiTcPZCGHYGmzwmGWw_qFK?usp=sharing. 
+
+if(!to_scrape){
+  
+  # Dropbox direct download link.
+  dropbox_link <- "https://www.dropbox.com/scl/fo/i7dvz8cv3ln0ee74zzane/APwyVBOuEvOP950lky0Am0A?rlkey=9nysqfziz5nw9vvcc4t0052nu&st=uxwb0wfq&dl=1"
+  
+  
+  # Path to save the downloaded zip file.
+  zip_file <- file.path(wdir, "data_folder.zip")
+  
+  # Download the Dropbox folder as a ZIP file.
+  download.file(dropbox_link, destfile = zip_file, mode = "wb")
+  
+  # Unzip the contents into the working directory.
+  unzip(zip_file, exdir = wdir)
+  
+  # Remove the ZIP file after extraction.
+  file.remove(zip_file)
+}
+
+################################################################################
+# Directory management.
+################################################################################
+
+# In which directory is the helper data?
+hdir <- paste0(wdir, "/00_helper_data")
+
+# In which directory is the main text data? 
+tdir <- paste0(wdir, "/01_main_text_data")
+
+# In which directory is the secondary visual data? 
+vdir <- paste0(wdir, "/02_secondary_image_data")
+
+# In which directory are the created visualsiations? 
+odir <- paste0(wdir, "/03_visualisations")
+
+# Do these directories exist? If not, create them. 
+if(dir.exists(hdir)){ } else{ dir.create(hdir) }
+
+if(dir.exists(tdir)){ } else{ dir.create(tdir) }
+
+if(dir.exists(vdir)){ } else{ dir.create(vdir) }
+
+if(dir.exists(odir)){ } else{ dir.create(odir) }
+
+################################################################################
+# Load packages (ensure previous installment).
+################################################################################
+
+library(tidyverse)
+library(RSelenium) # dynamic scraper.
+library(netstat) # to select the free port.
+library(readxl) # to read downloaded excel file.
+library(keyring) # to store API credentials.
+library(httr) # to make API calls.
+library(jsonlite) # to manipulate JSON files.
+library(xml2) # to parse the data from the API.
+library(rvest) # to scrape static webpages.
+library(grid) # to create graphical images.
+library(jpeg) # to read and write JPEG images.
+library(sf) # to handle shape files.
+library(readr) # to save tables as .csv files.
+library(plotly) # to make an interactive map.
+library(mongolite) # for the MongoDB database.
+library(knitr) # to improve table formatting after knitting. 
+
+################################################################################
+# IF RESCRAPING: HuggingFace Serverless API prerequisites.
+################################################################################
+
+# After creating an account and key, set the key by storing it in your computer's
+# keychain. The key only has to be set once, unhash the key_set function below
+# to do so. 
+
+# Following HuggingFace documentation, this author created a fine-grained token with the scope to make calls to the Serverless inference API.
+key_name <- "ai_youth_participation"
+# key_set(key_name)
+```
+
+## 2. What LLMs Tell Children Across Europe: Collecting Text Data
+
+In this section, data from an [official EU survey](https://data.europa.eu/data/datasets/s3181_fl545_eng?locale=en) on youth democratic participation is extracted. Its answers are then used to compute questions to be sent to the AI model. For example, Question 3 of the EU survey asks young people why they have not participated in any activities relating to democratic participation. To this question, 27.9% of the youth questioned in the Netherlands replied "I have not yet thought about it."
+
+This is translated into the prompt: I am *six* years old and from the *Netherlands*. I have never taken part in activities that relate to democratic participation because *I had not yet thought about it.* For my friends, this is *a little* the same. Can you tell me more about how I can do that?
+
+This enables tailoring the prompts for the LLM to real concerns that children in different European countries expressed through the EU survey, and children's personal context. It does so by adapting four parameters in each prompt: their age, country of origin, selected answers, and level of confidence in the answer. Answers are generated for three ages (6, 9, & 14 years) because this enables an additional dimension of analysis to evaluate how the model adapts responses (and biases) to different developmental stages (Piaget, 1962). The textual data are considered the main data in this report because LLMs currently are the main medium through which people engage with AI. 
+
+Both the text and image data generated in this report are limited to the specific models used; and through hallucinations they generated in some instances. Different models and parameters were tested, to minimise their impact. Future studies could collect data from a variety of models. I complied with the recommendations for use in the API documentation, as well as etiquette to minimise teh number and frequency of server requests.  
+
+```{r download_and_clean_EU_survey, message=FALSE}
+
+################################################################################
+# DOWNLOADING THE EU SURVEY ON YOUTH PARTICIPATION
+################################################################################
+
+# Delays of at least 2-seconds are added between every interaction on the webpage to mimic human behaviour. Before running each step, the previous step has to be fully loaded. 
+
+if (to_scrape) {
+  
+  # (1) Launch the driver and browser. 
+  rD <- rsDriver(browser=c("firefox"), verbose = FALSE, port = netstat::free_port(random = TRUE))
+  driver <- rD$client
+  
+  Sys.sleep(2)
+  
+  # (2) Define required URL and navigate to it. 
+  url <- "https://data.europa.eu/en"
+  driver$navigate(url)
+  
+  Sys.sleep(2)
+  
+  # (3) & (4) only need to be run if cookies/newsletter pop-ups are present.  
+  # (3) Close the newsletter pop-up.
+  close_newsletter_button <- driver$findElement(using = "xpath", value = "//button[contains(@class, 'ecl-button') and contains(@class, 'ecl-button--tertiary') and contains(text(), \"Don't ask me again\")]")
+  close_newsletter_button$clickElement()
+  
+  Sys.sleep(2)
+  
+  # (4) Accept only essential cookies. 
+  essential_cookies <- driver$findElement(using = "xpath", value = "//button[text()='Accept only essential cookies']")
+  essential_cookies$clickElement()
+  
+  Sys.sleep(2)
+  
+  # (5) Click on data button in search bar. 
+  arrow_data_button <- driver$findElement(using = "xpath", value = "//button[contains(@class, 'ecl-button') and contains(@class, 'ecl-button--primary') and contains(@class, 'ecl-menu__button-caret')]")
+  arrow_data_button$clickElement()
+  
+  Sys.sleep(2)
+  
+  # (6) Navigate to page with datasets.
+  high_value_datasets_button <- driver$findElement(using = "xpath", value = "//a[contains(@href, 'is_hvd=true')]")
+  high_value_datasets_button$clickElement()
+  
+  # This takes a while to load. 
+  Sys.sleep(5)
+  
+  # (7) Select all types of datasets in filter criteria. 
+  no_label <- driver$findElement(using = "xpath", value = "//label[@for='High-Value Dataset_false']")
+  no_label$clickElement()
+  
+  # This takes a while to load. 
+  Sys.sleep(3)
+  
+  # (8) Enter dataset name into the search bar.
+  search_field <- driver$findElement(using = "xpath", value = "//input[@placeholder='Search for datasets']")
+  search_field$sendKeysToElement(list("Flash Eurobarometer FL545 : Youth and democracy", key = "enter"))
+  
+  # This takes a while to load. 
+  Sys.sleep(5)
+  
+  # (9) Click on the dataset I am interested in. 
+  dataset_link <- driver$findElement(using = "xpath", value = "//a[contains(@class, 'dataset-info-box') and .//h2[text()='Flash Eurobarometer FL545 : Youth and democracy']]")
+  dataset_link$clickElement()
+  
+  Sys.sleep(5)
+  
+  # (10) Get the URL with which the required file can be downloaded. 
+  # Click on access button first. 
+  arrow_dataset <- driver$findElement(using = "xpath", value = "//*[@data-v-07a93781]//i[contains(text(), 'keyboard_arrow_down')]")
+  arrow_dataset$clickElement()
+  
+  Sys.sleep(5)
+  
+  # The arrow opens a dropdown on which to click to download the link. 
+  # But I am extracting the url in the html - selecting it through the href attribute.
+  
+  dataset_download_link <- driver$findElement(using = "xpath", value = "//*[@data-v-07a93781]//a[contains(@href, 'webgate.ec.europa.eu/ebsm/api/public/odp/download')]")
+  
+  Sys.sleep(5)
+  
+  # Get the link. 
+  download_url <- dataset_download_link$getElementAttribute("href")[[1]]
+  
+  Sys.sleep(2)
+  
+  # (11) Download the file from the URL.
+  if(to_save) {
+    file_path <- paste0(hdir, "eu_youth_democracy_2024.xlsx")
+    download.file(download_url, destfile = file_path)
+    
+  driver$close()
+  }
+}
+
+# List of required sheet names on the excel spreadsheet. 
+desired_sheets <- c("Q1", "Q2", "Q3", "Q4a", "Q4b", "Q5")
+  
+# (12) Read desired sheets into one data frame (they each have the same structure). 
+combined_data <- bind_rows(lapply(desired_sheets, function(sheet) {
+  read_excel(paste0(hdir, "/eu_youth_democracy_2024.xlsx"), sheet = sheet)
+  }))
+
+
+################################################################################
+# SCRAPING EU COUNTRY NAMES AND ABBREVIATIONS TO CLEAN EU SURVEY
+################################################################################
+
+# (1) The EU survey only has EU country abbreviations. Thus, scrape data to
+# create a named vector with country names and abbreviations. 
+
+# (a) Scraping html from EU website with glossary of country codes.  
+if (to_scrape) {
+  eu_glossary_html <- read_html("https://en.wikipedia.org/wiki/Member_state_of_the_European_Union")
+  
+  Sys.sleep(2)
+  
+  # (b) Extract official EU country abbreviations and clean output. 
+  country_abbreviations <- eu_glossary_html %>% 
+    html_nodes(".col12left td:nth-child(2)") %>%
+    html_text() %>%
+    str_remove_all("\n") %>%
+    # In the survey, they used a different abbreviation for Greece.
+    str_replace("GR", "EL")  
+  
+  # (c) Extract state names and clean output.
+  country_names <- eu_glossary_html %>% 
+    html_nodes(".col12left td:nth-child(1)") %>%
+    html_text() %>%
+    str_remove_all("\\[.?\\]") %>%
+    str_remove_all("\n") %>%
+    str_trim()
+  
+  # (d) Create named vector with country abbreviations and names. 
+  country_index <- setNames(country_names, country_abbreviations)
+  
+  # (e) Save an object with this named vector in the helper data directory. 
+  # Saving it in .rds format to preserve the named index structure. 
+  saveRDS(country_index, file = file.path(hdir, "country_index.rds"))
+}
+
+# If not to scrape, load the index from the helper directory. 
+if (!to_scrape) {
+  country_index <- readRDS(file.path(hdir, "country_index.rds"))
+}
+
+# (2) Use this named vector to create informative colnames for the dataset. 
+# Replace abbreviations with country names in one of the rows. 
+combined_data[10, 1] <- "general_information"
+combined_data[10, ] <- combined_data[10, ] %>%
+  mutate(across(everything(), ~ str_replace_all(., country_index)))
+  
+# Extract them and assign them to be the colnames in dataset.  
+new_colnames <- combined_data[10, ]
+colnames(combined_data) <- new_colnames
+  
+################################################################################
+# CLEANING THE EU SURVEY ON YOUTH PARTICIPATION
+################################################################################
+
+# (1) Remove superfluous columns and rows.  
+rows_to_remove <- c("Youth and democracy",
+                    "Fieldwork: 03/04/2024-12/04/2024", 
+                    "VOLUME A (Weighted)",
+                    "Base: All",
+                    "Base: Total",
+                    "Base: Weighted Total",
+                    "general_information",
+                    "Base: IF Q2 = 9",
+                    "Base: IF Q4a=1")
+
+cleaned_freq_and_perc <- combined_data %>% 
+  filter_all(any_vars(!str_detect(., "\\([A-Z]{2}\\)"))) %>%
+  filter_all(any_vars(!str_detect(., "Country"))) %>% 
+  filter(!(general_information %in% rows_to_remove)) %>%
+  filter(!(Belgium %in% 'BE')) %>%
+  select(-`EU27`)
+
+# Removing the percentages data from the cleaned_survey_data. 
+# And add an answer_id column. 
+cleaned_freq_data <- cleaned_freq_and_perc %>% 
+  filter(!(general_information %in% NA)) %>%
+  mutate(answer_id = row_number())
+
+
+################################################################################
+# CREATE TARGETTED DATAFRAMES WITH REQUIRED INFORMATION FROM EU SURVEY
+################################################################################
+
+# (1) Create dataframe with the questions in the EU survey and their IDs.
+questions_dataframe <- cleaned_freq_data %>% 
+  filter(str_detect(general_information, '^Q\\d+')) %>%
+  select(1) %>%
+  rename(question = general_information) %>%
+  mutate(
+    question_id = str_extract(question, '^Q\\d+([a-z])?'), 
+    question = str_remove(question, '^Q\\d+([a-z])?'),
+    question = str_replace(question, '\\[MULTIPLE ANSWERS]', '')
+  )
+
+# (2) Create dataframe with possible answers for each question, the relevant
+# question ID, and a unique answer ID. 
+# The questions were in the general_information column, alongside the answers. 
+# The code below therefore detects the rows with questions, fills a new column 
+# up to that row with a number, and then replaces those numbers with the question IDs.
+answers_dataframe <- cleaned_freq_data %>%
+  select(1) %>%
+  mutate(answer_id = row_number(), 
+         ### * the use of the cumsum function to detect all rows until a row
+         ### with a new question was generated / found as a solution using AI. 
+         question_id = cumsum(str_detect(general_information, '^Q\\d+')),
+         question_id = recode(question_id,
+                              `1` = 'Q1',
+                              `2` = 'Q2',
+                              `3` = 'Q3',
+                              `4` = 'Q4a',
+                              `5` = 'Q4b',
+                              `6` = 'Q5')
+         ) %>%
+  filter(!str_detect(general_information, "^Q\\d+")) %>%
+  rename(answer = general_information)
+
+# (3) Create a separate dataframe with answers for each question. 
+# Remove the question itself and the group column.  
+### * the idea to use a function inside lapply to split the dataframe by 
+### * question ID was generated using AI. 
+split_dataframes <- split(answers_dataframe, answers_dataframe$question_id) %>%
+  lapply(function(df) df %>% 
+           select(-question_id))
+
+# Extract the split dataframes into individual variables
+Q1 <- split_dataframes[[1]]
+Q2 <- split_dataframes[[2]]
+Q3 <- split_dataframes[[3]]
+Q4a <- split_dataframes[[4]]
+Q4b <- split_dataframes[[5]]
+Q5 <- split_dataframes[[6]]
+
+# (4) Create separate dataframe with percentages from the initial cleaning.  
+# Some answers were removed from analyses because some answers would not have 
+# led to informative prompts, and to avoid redundancy when it would have led to 
+# similar prompts. 
+rows_to_remove <- c(1, 9:14, 20:21, 31:35, 43:44, 54:55)
+
+# Add the question_id and answer_id columns, and reorder them. 
+cleaned_percent_eu <- cleaned_freq_and_perc %>% 
+  filter(is.na(general_information)) %>%
+  mutate(answer_id = answers_dataframe$answer_id,
+         question_id = answers_dataframe$question_id) %>%
+  select(question_id, answer_id, everything(), -general_information) 
+
+# Removing rows in a separate step to facilitate further analyses. 
+percent_data <- cleaned_percent_eu %>%
+  filter(!row_number() %in% rows_to_remove)
+
+# Note that percentages may not add to 100% for each question because children could select more than one answer for each question.
+
+```
+
+```{r prompt_prerequisites}
+
+################################################################################
+# USING THE SURVEY TO CREATE PROMPTS FOR THE LLM MODEL
+################################################################################
+
+# This sections requires the questions_dataframe and the answers_dataframe.  
+
+# (1) Add LLM prompts to questions dataframe. 
+# These were articulated by the student and can therefore not be sourced from the internet. 
+
+prompt_values <- c(
+  "I think that to make my voice heard q_answer is likert_rating effective. Can you give me more ways of doing this?",
+  "I am interested in democratic participation and have likert_rating participated in q_answer. Can you tell me about how I can do more things like that?",
+  "I have never taken part in activities that relate to democratic participation because q_answer. For my friends, this is likert_rating the same. Can you tell me more about how I can do that?",
+  "I learnt that I can take actions to change things around me. q_answer, my friends likert_rating do this too. Can you explain to me how I can do this?",
+  "I am likert_rating interested in changing society in the area of q_answer. Can you tell me how I can do this?",
+  "I know likert_rating about q_answer. Can you tell me more about this?"
+)
+
+quest_and_prompts_df <- questions_dataframe %>%
+  mutate(prompt = prompt_values) %>%
+  select(question_id, question, prompt)
+
+# (2) Create a function that translates the percentage of people who chose a 
+# given answer for each question into a Likert scale likelihood level. 
+# The Likert scale categories are: Not at all, A little, Kind of, A lot, Very much.
+compute_likert_rating <- function(value) { 
+  if (value >= 0 && value < 20) { 
+    return("not at all") } 
+  else if (value >= 20 && value < 40) { 
+    return("a little") } 
+  else if (value >= 40 && value < 60) { 
+    return("kind of") } 
+  else if (value >= 60 && value < 80) { 
+    return("a lot") } 
+  else if (value >= 80 && value <= 100) { 
+    return("very much") }
+  else {return("")}
+  }
+
+# (3) Prompt creation function. Each prompt starts with: 
+# "I am X years old and from country y."
+create_prompt <- function(question_id, answer_id, age, country, value) {
+  
+  # Compute likelihood rating.
+  likelihood <- compute_likert_rating(value)
+  
+  # Extract the template from the questions_dataframe.
+  selected_template <- quest_and_prompts_df$prompt[quest_and_prompts_df$question_id == question_id]
+  
+  # Extract the answer from the answers_dataframe.
+  selected_answer <- answers_dataframe$answer[answers_dataframe$answer_id == answer_id]
+  
+  # Replace placeholders in the template.
+  final_prompt <- gsub("q_answer", selected_answer, selected_template)
+  final_prompt <- gsub("likert_rating", likelihood, final_prompt)
+  
+  # Create the full prompt by combining all elements. 
+  full_prompt <- paste("I am ", age, " years old and from ", country, ". ", final_prompt, sep = "")
+  
+  # Return the full prompt.
+  return(full_prompt)
+}
+
+# Showing you an example of what the generated prompt will look like. 
+prompt <- create_prompt("Q1", 5, 6, "Germany", 25)
+
+cat(paste0("An example prompt sent to the text-generating model is: ", prompt, "\n"))
+
+```
+
+```{r extract_text_data_API}
+
+################################################################################
+# SETTING UP THE HUGGINGFACE INFERENCE API
+################################################################################
+
+# (1) Set up the endpoint of the API by specifying the model to be used. 
+# The ready-to-use models on the API may differ depending on demand. 
+# If the model below is not available, it can easily be replaced below with an available model ID from the website. 
+
+# To access this model, terms and conditions for this need to be accepted and contact information needs to be specified - this is the link: https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407. 
+text_model_id <- "mistralai/Mistral-Nemo-Instruct-2407"
+
+text_base_url <- paste0("https://api-inference.huggingface.co/models/", text_model_id)
+
+# (3) Creating a function that will compute and extract the answers using the API. 
+# This function is going to take the dataframe with the prompts, and the question_ids 
+extract_response <- function(prompt, text_base_url, key_name) {
+  
+  # (a) Send a post request to tell the model what question I am asking it. 
+  # I need to save the request to an object and then parse it using the fromJSON file. 
+  # first defining parameters for modularity. 
+  
+  to_send <- list(
+    inputs = prompt,
+    parameters = list(
+      max_new_tokens = 400, # can be included to shorten the produced answers. 
+      details = FALSE # don't want additional info such as model performance. 
+      )
+    )
+  
+  # (b) This will save the output of the POST request. 
+  output <- POST(
+    text_base_url, 
+    config = add_headers(
+      Authorization = paste0("Bearer ", key_get(key_name)), # this is required in the documentation.
+      `Content-Type` = "application/json" # this is required in the documentation.
+      ),
+    ### * encountered a recurrent error about deserialising the JSON body 
+    ### * that I was not able to solve; Chat GPT suggested the use of the 
+    ### * auto_unbox argument below to solve it. 
+    body = toJSON(to_send, auto_unbox = TRUE),
+    encode = "json" # the API reads the input in JSON. This encodes it accordingly. 
+    )
+  
+  # Print JSON to make sure it was implemented as intended. 
+  print(toJSON(to_send, auto_unbox = TRUE))
+
+  if (status_code(output) != 200) {
+  stop(paste("API request failed with status:", status_code(output)))
+}
+  
+  response_content <- content(output, "parsed")
+  
+  return(response_content[[1]]$generated_text)
+}
+
+################################################################################
+# EXTRACT MAIN DATA BY GENERATING PROMPTS THROUGH EU DATASET, AND 
+# COLLECTING RESPONSES FROM LLM THROUGH HUGGINGFACE API. 
+################################################################################
+
+# The Huggingface Inference API has a free daily limit of 1000 requests; follow instructions below to implement this. In case you happen to have no daily limits, the first line of code below can be used. 
+# ages <- c(6, 9, 14)
+
+# Given request restrictions on the API, each of the ages (6, 9 and 14) can be 
+# run on separate days using the code below, by unhashing the respective age. 
+
+# (1) Day 1:
+ages <- c(6) 
+
+# (2) Day 2:
+# ages <- c(9)
+
+# (3) Day 3:
+# ages <- c(14)
+
+
+# If scraping, the country names object required below would have been created
+# when cleaning the scraped EU survey. 
+if(!to_scrape){
+  country_names <- percent_data %>% 
+  select(-question_id, -answer_id) %>% 
+  names()
+  }
+
+# Please note that the code below will only retrieve text for countries
+# if they do not yet exist in the chosen directory.
+# (1) Loop through ages.
+if (to_scrape) { 
+  for (current_age in ages) {
+    
+    # (2) Create folder for the current age if it doesn't exist.
+    current_age_tdir <- paste0(tdir, "/age_", current_age)
+    if (!dir.exists(current_age_tdir)) {
+      dir.create(current_age_tdir, recursive = TRUE)
+    }
+
+    # (3) Loop through countries. 
+    for (current_country in country_names) {
+      
+      # (4) Define the file name for the current country within the age folder
+      file_name <- file.path(current_age_tdir, paste0(current_country, ".txt"))
+      
+      # (5) Skip to the next country if the .txt file already exists. 
+      if (file.exists(file_name)) {
+          next
+      }
+      
+      # (6) Initialize empty list to store extracted responses.
+      extracted_responses <- vector("list", nrow(percent_data))
+
+      # (7) Loop through rows of the current country in percent_data.
+      for (i in 1:(nrow(percent_data))) {
+        
+        question_id <- percent_data$question_id[i]
+        answer_id <- percent_data$answer_id[i]
+        value <- percent_data[[current_country]][i]
+        prompt <- create_prompt(question_id, answer_id, current_age, current_country, value)
+        
+        # (8) Extract response. 
+        response <- extract_response(prompt, text_base_url, key_name)
+        
+        Sys.sleep(5)
+        
+        # (9) Construct the indicator of the input and append to the list.
+        extracted_responses[[i]] <- paste0(question_id, "_", answer_id, 
+                                           " ", response)
+      }
+      
+      # Collapse the list into a single character string.
+      extracted_responses <- paste(unlist(extracted_responses), collapse = "\n")
+      
+      # Save the responses as a .txt file in the current_age folder.
+      write_file(extracted_responses, file_name)
+    }
+  }
+}
+```
+
+## 3. Looking at what they see: Images visualising the most poorly understood concepts across EU countries.
+
+In developmental psychology, images are established as a powerful medium to facilitate children's learning (Houts, 2006). Below, the concepts that children engaged with least in each country are visualised. This can facilitate analyses of biases in the generated images. For example, of all the possible methods of democratic participation investigated in the EU survey, youth in Spain reported the least engagement in *contacting a politician about an issue*. Therefore, an image of what this would look like is generated for different developmental stages (ages 6,9 & 14), for children in Spain.
+
+An important ethical consideration of generating images through an API is the data intensity of requests, since the images are larger file sizes than most textual responses. Second, generating images requires substantial computational power to process outputs. To mitigate, substantial delays of 30 seconds were implemented between each request made to the server and the code is designed to generate each image once.
+
+```{r setup_prompts_for_image_generation}
+
+################################################################################
+# TURNING RESPONSES FROM THE EU SURVEY INTO PROMPTS TO GENERATE IMAGES
+################################################################################
+
+# (1) Remove EU survey answers that do not represent democratic participation. 
+# and therefore do not make sense to visualise e.g., "Don't know", or "Yes". 
+other_concepts <- c(10:12, 14:15, 22:23, 25:35, 37:40, 48, 49, 60:61)
+
+concepts_to_visualise <- cleaned_percent_eu %>%
+  filter(!(answer_id %in% other_concepts))
+
+# (2) Create new column with the most poorly understood concept for each country. 
+# To do so, create a function to find the nth lowest rating. 
+find_nth_lowest <- function(concepts_to_visualise, country, n) {
+  lowest_rating_data <- concepts_to_visualise %>%
+    select(answer_id, matches(country))
+  nth_lowest_row <- lowest_rating_data[order(lowest_rating_data[[2]])[n], ]
+  nth_lowest_row$answer_id
+}
+
+# Apply function to create new tibble with lowest rating column. 
+lowest_ratings_answer_id <- tibble(country = country_names) %>%
+  rowwise() %>%
+  mutate(lowest_ans_id_rating = find_nth_lowest(percent_data, country, 1))
+
+# (3) Create the function that will generate the prompts for the images. 
+# In this format: I am *age* years old and from *country*, can you show me a drawing of what *answer* looks like?
+image_prompt_generation <- function(answer_id, age, country) {
+  
+  # Get the text of the answer using the answers_dataframe. 
+  answer <- answers_dataframe$answer[answers_dataframe$answer_id == answer_id]
+  
+  # Fill in the prompt. 
+  prompt <- paste("I am ", age, " years old and from ", country, ". Can you show me a drawing of what ", answer, " looks like?", sep = "")
+  
+  return(prompt)
+}
+
+
+# Showing you an example of what the generated prompt will look like. 
+image_prompt <- image_prompt_generation(4, 6, "Germany")
+
+cat(paste0("An example prompt sent to the image-generating model is: ", image_prompt, "\n"))
+```
+
+
+```{r generate_secondary_image_data}
+
+################################################################################
+# SET UP HUGGINGFACE INFERENCE API FOR IMAGE GENERATION
+################################################################################
+
+# (1) Set up HuggingFace API endpoint. Specify the model to be used.  
+# This model returns images in raw format, and the code below is tailored to that. 
+# To access this model, terms and conditions for this need to be accepted and contact information needs to be specified - this is the link: https://huggingface.co/black-forest-labs/FLUX.1-schnell 
+image_model_id <- "black-forest-labs/FLUX.1-schnell"
+
+image_base_url <- paste0("https://api-inference.huggingface.co/models/", image_model_id)
+
+# (2) Creating a function that will make a call to the API to generate and return the image.  
+extract_image_data <- function(prompt, image_base_url, key_name) {
+  # Define the parameters for the request.
+  to_send <- list(
+    inputs = prompt, 
+    parameters = list(
+      guidance_scale = 15,
+      num_inference_steps = 30,
+      scheduler = "plms"
+    )
+  )
+  
+  # Send the POST request.
+  output <- POST(
+    image_base_url, 
+    config = add_headers(
+      Authorization = paste0("Bearer ", key_get(key_name)),
+      `Content-Type` = "application/json"
+    ),
+    body = toJSON(to_send, auto_unbox = TRUE),
+    encode = "json"
+  )
+  
+  # Parse the response.
+  response_content <- content(output, "raw")
+  
+  return(response_content)
+}
+
+
+# (3) Create a function that will save and process the generated image. 
+save_raw_image_as_jpeg <- function(raw_image_data, file_name, output_dir) {
+  # Ensure the directory ends with a "/"
+  if (!grepl("/$", output_dir)) {
+    output_dir <- paste0(output_dir, "/")
+  }
+  
+  # Construct the full output path.
+  output_path <- paste0(output_dir, file_name)
+  
+  # Save the raw binary data as a JPEG file.
+  writeBin(raw_image_data, output_path)
+  
+  return(output_path)
+}
+
+
+# (4) Create a function that will generate all the prompts and save output images.
+generate_images <- function(ages, lowest_ratings_answer_id, image_base_url, key_name, clear_directory = FALSE) {
+  
+  # Loop through each age.
+  for (age in ages) {
+    
+    # Define the output directory.
+    output_dir <- paste0(vdir, "/age_", age)
+    
+    # Only create the directory if it does not already exist.
+    if (!dir.exists(output_dir)) {
+      dir.create(output_dir, recursive = TRUE)  
+      } else if (clear_directory) {
+        unlink(output_dir, recursive = TRUE, force = TRUE)
+        dir.create(output_dir, recursive = TRUE)  
+        }
+    
+    # Loop through each row in the lowest_ratings_answer_id dataframe.
+    for (i in 1:nrow(lowest_ratings_answer_id)) {
+      
+      # Extract the necessary details.
+      answer_id <- lowest_ratings_answer_id$lowest_ans_id_rating[i]
+      country <- lowest_ratings_answer_id$country[i]
+      
+      # Define the file name for the current country within the age folder.
+      file_name <- file.path(output_dir, paste0(country, ".jpeg"))
+      
+      # Skip to the next iteration if the file exists.
+      if (file.exists(file_name)) {
+        next 
+        }
+      
+      # Generate the prompt.
+      prompt <- image_prompt_generation(answer_id, age, country)
+      
+      # Call the API to generate the image.
+      response_content <- extract_image_data(prompt, image_base_url, key_name)
+      
+      Sys.sleep(30)
+      
+      # Save the image.
+      image_name <- paste0(country, ".jpeg")
+      
+      save_raw_image_as_jpeg(response_content, image_name, output_dir)
+    }
+  }
+}
+
+
+# (5) Define the age categories and implement function to generate and retrieve
+# images. 
+ages <- c(6, 9, 14)
+
+if(to_scrape) {
+  generate_images(ages, lowest_ratings_answer_id, image_base_url, key_name)
+}
+
+
+################################################################################
+# Images to recreate
+################################################################################
+
+# Likely because of the repeated substantial requests made to the server, 
+# some of the images returned may be empty .jpeg files. In case you wish to recreate
+# any files, you can do so by adding their names into the age_X_recreate object, 
+# (as shown with the Ireland example below) and unhashing the rest of the code below. 
+
+# age_6_recreate <- c("Ireland.jpeg")
+
+# age_9_recreate <- c()
+
+# age_14_recreate <- c()
+
+# Create function to remove files that should be recreated.  
+remove_files <- function(folder, files) {
+  file_paths <- paste0(vdir, "/", folder, "/", files)
+  file.remove(file_paths)
+}
+
+# If images need to be scraped again, this is then the function to run. 
+if(to_scrape) {
+  
+  # Remove files for each age group.
+  # remove_files("age_6", age_6_recreate)
+  # remove_files("age_9", age_9_recreate)
+  # remove_files("age_14", age_14_recreate)
+  
+  # generate_images(ages, lowest_ratings_answer_id, image_base_url, key_name)
+}
+```
+
+## 4. Data Transformations: Understanding the EU Survey on Youth Democratic Participation in Depth.
+
+The two example dataframes below demonstrate that the data conform to the rules for tidy data described by Hadley Wickham.
+
+```{r demonstrate_tidy_tabular_data}
+
+head(cleaned_percent_eu)
+
+```
+
+Below, these data are transformed to facilitate the interpretation and analysis of findings. For example, findings are synthesised by creating overall scores for the pillars of the civic participation model, aiming to quantify and access civic participation in three categories: resources, engagement, and recruitment.
+
+```{r data_transformations}
+
+################################################################################
+# COMPUTE DATA TRANSFORMATIONS
+################################################################################
+
+# (1) Merge the question_id and answer_id into a single column such that it can 
+# be used to match the generated text data and provides information in a more condensed
+# format. This results in one column with a more informative identifier for the answers
+# that are in the format Q1_2.
+
+eu_youth_dem_data <- cleaned_percent_eu %>% 
+  mutate(response_id = paste(question_id, answer_id, sep = "_")) %>% 
+  # remove now redundant columns and reorder them. 
+  select(response_id, everything(), -question_id, -answer_id)
+  
+# (2) Create a row that has the mean and a row that has the standard deviation
+# for the percentage of participants who chose each answer across all 27 EU countries.
+
+ eu_youth_dem_data <- eu_youth_dem_data %>%
+  # Ensures correct datatypes for mean and sd operations.
+  # Transform to dbl datatype means that the number of decimal places will be homogenised. 
+  mutate(across(!response_id, as.numeric)) %>%
+  rowwise() %>%
+  mutate(EU_mean = mean(c_across(where(is.numeric)), na.rm = TRUE),
+         EU_sd = sd(c_across(where(is.numeric)), na.rm = TRUE)) %>%
+  ungroup() %>%
+  # Round the new columns to two decimal places. 
+  mutate(EU_mean = round(EU_mean, 2), 
+         EU_sd = round(EU_sd, 2))
+
+# (3) Transpose the data such that the countries become rows instead of columns. 
+# This facilitates further analyses and improves readability.
+ 
+eu_youth_dem_data <- eu_youth_dem_data %>%
+  pivot_longer(cols = -response_id, names_to = "Country", values_to = "Value") %>%
+  pivot_wider(names_from = response_id, values_from = Value)
+
+
+# (4) The democratic participation as defined by the EU can be broken down into three
+# categories: (1) political participation, (2) volounteering, and (3) social engagement. 
+# This can facilitate a thematic analysis of these data. 
+
+polit_participation <- c("Q1_2", "Q1_3", "Q1_4", "Q1_8", "Q5_51", "Q5_52", "Q5_53", "Q5_57", "Q5_58", "Q5_59")
+volunteering <- c("Q1_5", "Q1_7", "Q2_18", "Q2_19", "Q2_20")
+soc_engagement <- c("Q1_6", "Q1_9", "Q4a_37", "Q4b_41", "Q4b_42", "Q4b_43", "Q4b_44", "Q4b_45", "Q4b_46", "Q4b_47")
+
+# Add averages for each category.
+eu_youth_dem_data <- eu_youth_dem_data %>%
+  mutate(
+    polit_participation_avg = rowSums(select(., all_of(polit_participation))) / length(polit_participation),
+    volunteering_avg = rowSums(select(., all_of(volunteering))) / length(volunteering),
+    soc_engagement_avg = rowSums(select(., all_of(soc_engagement))) / length(soc_engagement)
+  )
+
+# (5) Create one column for each dimension, and an overall column for the final score on
+# propensity to participate in democracy. 
+
+# Resources: For democratic participation, individuals need civic skills, money, and time.  
+resources <- c("Q1_4", "Q1_5", "Q1_6", "Q3_25", "Q3_27", "Q3_29", "Q3_30")
+
+# Engagement: Connectedness to their communities through political interests, ideology, and partisanship is important. 
+engagement <- c("Q1_3", "Q1_7", "Q1_9", "Q4b_41", "Q4b_44", "Q4b_47")
+
+# Recruitment: An individual's participation propensity is increased if they are in groups that ask them to.
+recruitment <- c("Q1_8", "Q2_15", "Q2_18", "Q2_19", "Q2_20", "Q5_58", "Q5_51")
+
+# Compute a column for each dimension of the civic voluntarism model, as well 
+# as an overall column that averages the output on the three dimensions. 
+eu_youth_dem_data <- eu_youth_dem_data %>%
+  
+  # Calculate participation_likelihood and replace values for EU_mean and EU_sd
+  mutate(
+    resources_avg = rowSums(select(., all_of(resources))) / length(resources),
+    engagement_avg = rowSums(select(., all_of(engagement))) / length(engagement),
+    recruitment_avg = rowSums(select(., all_of(recruitment))) / length(recruitment),
+    participation_likelihood = (resources_avg + engagement_avg + recruitment_avg) / 3,
+    participation_likelihood = if_else(
+      Country %in% c("EU_mean", "EU_sd"), NA_real_, participation_likelihood
+    )
+  ) %>%
+  
+  # Standardize participation_likelihood (ignoring NAs).
+  # These have to be done in separate mutate calls, because otherwise they all get computed
+  # simultaneously which can be a problem. 
+  mutate(
+    participation_likelihood_standardised = 
+      (participation_likelihood - mean(participation_likelihood, na.rm = TRUE)) / 
+      sd(participation_likelihood, na.rm = TRUE)
+  ) %>%
+  # Remove the unstandardized column as it is not needed anymore. 
+  select(-participation_likelihood)
+
+# Additional: Rounding the decimal places of the new columns from (4) & (5) to two. 
+eu_youth_dem_data <- eu_youth_dem_data %>%
+  mutate(polit_participation_avg = round(polit_participation_avg, 2),
+    volunteering_avg = round(volunteering_avg, 2),
+    soc_engagement_avg = round(soc_engagement_avg, 2),
+    resources_avg = round(resources_avg, 2),
+    engagement_avg = round(engagement_avg, 2),
+    recruitment_avg = round(recruitment_avg, 2),
+    participation_likelihood_standardised = round(participation_likelihood_standardised, 2)
+    )
+
+# Save the table into a .csv file to facilitate future use into 
+# the helper data directory, since this is not the main output of this project. 
+write_csv(eu_youth_dem_data, paste0(hdir, "/eu_youth_dem_data.csv"))
+
+print("This is an initial insight into the data scraped from the EU survey.")
+head(eu_youth_dem_data)
+
+```
+
+## 5. Seeing Why This Matters: a Visual Introduction to the Data
+
+### 5.1 Young people's understandings of democratic participation differs importantly across EU countries.
+
+First, the shape files with the boundaries of the EU countries are scraped from [this](https://ec.europa.eu/eurostat/web/gisco/geodata/administrative-units/countries) website. This facilitates the visualisation displayed below, which illustrates differences in democratic participation across EU countries using the civic participation score created above.
+
+```{r visualisation_prerequisites}
+
+################################################################################
+# SCRAPE SHAPE FILES WITH EU COUNTRY BOUNDARIES (necessary for visualisation)
+################################################################################
+
+if (to_scrape) {
+  # (1) Launch the automated web browser and driver. 
+  rD <- rsDriver(browser=c("firefox"), verbose = FALSE, port = free_port(random = TRUE))
+  driver <- rD$client
+  
+  Sys.sleep(2)
+  
+  # (2) Navigate to the Eurostat homepage. 
+  url <- "https://ec.europa.eu/eurostat/web/main/home"
+  driver$navigate(url)
+  
+  Sys.sleep(2)
+  
+  # (3) Click on the data dropdown button. 
+  searchbar <- driver$findElement(using = "xpath", value = "//input[@placeholder='Enter search term' and @type='text']")
+  searchbar$sendKeysToElement(list("GISCO Countries", key = "enter"))
+  
+  Sys.sleep(2)
+  
+  # (4) Select the right page
+  gicso_geodata_page <- driver$findElement(using = "xpath", value = "//a[contains(@aria-label, 'GISCO') and contains(@aria-label, 'Countries')]")
+  gicso_geodata_page$clickElement()
+  
+  # There is no link to the download url in the HTML. Instead, it appears appears that
+  # the download link is dynamically generated through the JavaScript code embedded 
+  # in the HTML of the webpage. An examination of the code showed that the URLs generated
+  # follow the recreated pattern below. 
+  
+  # Define the dataset name and download link
+  dataset_name <- "CNTR_RG_20M_2024_3035.shp.zip"
+  download_link <- paste0("https://gisco-services.ec.europa.eu/distribution/v2/countries/shp/", dataset_name)
+  
+  # Define the file name and save it in teh helper data directory.
+  dataset_name <- "CNTR_RG_20M_2024_3035.shp.zip"
+  geom.file <- file.path(hdir, dataset_name)
+  
+  # Check if the file already exists
+  if (file.exists(geom.file)) {
+    print("File already exists. No need to download.")
+    } else {
+      # Download the file if it doesn't exist
+      download.file(download_link, geom.file, mode = "wb")
+      print(paste("File downloaded to:", geom.file))
+    }
+  
+  Sys.sleep(2)
+  
+  # Extract only the shapefile (.shp) from the ZIP
+  unzip_files <- unzip(geom.file, list = TRUE) # List files in the ZIP
+  shapefile_name <- unzip_files$Name[grepl("\\.shp$", unzip_files$Name)] # Find the .shp file
+  
+  if (length(shapefile_name) > 0) {
+    # Extract only the shapefile
+    shapefile_path <- file.path(hdir, shapefile_name) # Full path to the shapefile
+    unzip(geom.file, files = shapefile_name, exdir = hdir)
+    print(paste("Shapefile extracted to:", shapefile_path))
+    
+    # Remove the .zip file
+    file_removed <- file.remove(geom.file)
+    
+    Sys.sleep(2)
+    
+    driver$close()
+
+  }
+}
+
+# Load the shapefile.
+shapefile_path <- file.path(hdir, "CNTR_RG_20M_2024_3035.shp")
+sf_data <- read_sf(shapefile_path)
+
+```
+
+```{r creating_country_visualisation}
+
+################################################################################
+# FILTER THE ROWS OF THE SHAPE FILE FOR NECCESSARY EU COUNTRIES
+################################################################################
+
+# (a) Checked that all the countries in the EU file are present in the shape file
+# and have the same abbreviation as we extracted earlier - these are the 27 EU countries.
+countries <- c(eu_youth_dem_data$Country, "Switzerland")
+
+# Filter and merge teh two datasets for the visualisation. 
+eu_27_sf_data <- sf_data %>%
+  filter(NAME_ENGL %in% c(eu_youth_dem_data$Country, "Switzerland")) %>%  # Switzerland as NA.
+  left_join(eu_youth_dem_data, by = c("NAME_ENGL" = "Country")) 
+
+# Plot the data
+eu_youth_partic_map <- ggplot(eu_27_sf_data) +
+  geom_sf(aes(fill = participation_likelihood_standardised),
+          color = "#383E42",
+          linewidth = 0.35) +
+  scale_fill_gradientn(
+    # Use colour-blind frendly colours from colorbrewer. 
+    colors = c("#d01c8b", "#f7f7f7", "#b8e186", "#4dac26"), 
+    values = scales::rescale(c(-2, -1, 0, 2)), # Rescale the gradient. 
+    name = "Participation Index",                            
+    na.value = "#909090"                                     
+  ) +
+  coord_sf(
+    xlim = c(800000, 7550000),
+    ylim = c(1500000, 5500000)  
+  ) +
+  labs(title = "Youth Participation Likelihood Across EU Countries") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+if(to_save){
+  file_name = paste0(odir, "/eu_youth_partic_map.pdf")
+  ggsave(eu_youth_partic_map, file=file_name , height=5, width=8)
+}
+
+print(eu_youth_partic_map)
+```
+
+### 5.2 - What do Children and Young People See?
+
+An insight into possible biases is illustrated below, where the positive attitude of the children contacting politicians in Austria contrasts with the negative attitude of children doing the same beahviour in Poland.
+
+```{r visualise_images}
+
+################################################################################
+# VISUALISE THE IMAGES CREATED BY THE LLM
+################################################################################
+
+# Define the paths of the images to plot. 
+image_paths <- c(paste0(vdir, "/age_6/Austria.jpeg"),
+                 paste0(vdir, "/age_9/Austria.jpeg"),
+                 paste0(vdir, "/age_14/Austria.jpeg"),
+                 paste0(vdir, "/age_6/Poland.jpeg"),
+                 paste0(vdir, "/age_9/Poland.jpeg"),
+                 paste0(vdir, "/age_14/Poland.jpeg"))
+
+# Define the labels of the images to plot.
+image_labels <- c("Age 6", "Age 9", "Age 14", "Age 6", "Age 9", "Age 14")
+
+# Define the country for each image.
+image_countries <- c("Austria", "Austria", "Austria", "Poland", "Poland", "Poland")
+
+path_to_img_tibble <- function(img_path, label, country) {
+  
+  # Read the image. 
+  img <- readJPEG(img_path)
+  
+  # Initialise a tibble of the right size. 
+  img_tibble <- tibble(
+    expand.grid(y = dim(img)[1]:1, x = 1:dim(img)[2]) 
+  )
+  
+  # Extract red, blue and green matrices, mix them together and add label. 
+  img_tibble$red <- as.vector(img[,,1])
+  img_tibble$green <- as.vector(img[,,2])
+  img_tibble$blue <- as.vector(img[,,3])
+  img_tibble$fill <- rgb(img_tibble$red, img_tibble$green, img_tibble$blue)
+  img_tibble$image <- label
+  img_tibble$country <- country  # Add country information
+  
+  return(img_tibble)
+}
+
+# Initialize empty list to store tibbles.
+image_tibbles <- list()
+
+# Loop over the image paths and labels.
+for (img_path in seq_along(image_paths)) {
+  image_tibbles[[img_path]] <- path_to_img_tibble(
+    img_path = image_paths[img_path],
+    label = image_labels[img_path],
+    country = image_countries[img_path]
+  )
+}
+
+# Combine all tibbles into one data frame.
+all_images_tibble <- bind_rows(image_tibbles) %>%
+  mutate(
+    # Define the order in which they should appear. 
+    image = factor(image, levels = c("Age 6", "Age 9", "Age 14")),
+    country = factor(country, levels = c("Austria", "Poland")) 
+  )
+
+
+imgaes_plot <- ggplot(all_images_tibble, aes(x = x, y = y, fill = fill)) +
+  geom_raster() +
+  scale_fill_identity() +  
+  coord_equal(ratio = 1) + 
+  labs(title = "How AI Depicts Contacting Politicians When \nPrompted by Children Across Ages in Austria and Poland") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12.5, face = "bold"),
+    strip.text.x = element_text(size = 10, face = "italic", hjust = 0.5, margin = margin(t = 5, b = 5)),  # Age labels.
+    strip.text.y = element_text(size = 10, face = "italic", angle = 0, margin = margin(r = 5, l = 5))    # Country labels.
+  ) +
+  facet_grid(rows = vars(country), cols = vars(image), switch = "y")  # Countries on the left
+
+
+if (to_save) {
+  file_name <- paste0(odir, "/political_particpation_austria_poland.pdf")
+  ggsave(imgaes_plot, file = file_name, height = 8, width = 8)  # Adjust size for grid layout
+}
+
+print(imgaes_plot)
+
+```
+
+## 6. Saving the Collected Data and Outputs
+
+The generated data/outputs are saved in a zip folder accessible [here](https://www.dropbox.com/scl/fo/i7dvz8cv3ln0ee74zzane/APwyVBOuEvOP950lky0Am0A?rlkey=9nysqfziz5nw9vvcc4t0052nu&st=uxwb0wfq&dl=0); and in documents on a MongoDB database. For other operating systems, please follow [this installation guide](https://www.mongodb.com/docs/manual/installation/).
+
+```{bash eval=FALSE}
+# Below is the installation code for MacOS; it needs to be run in the terminal. 
+
+# To work with and manipulate data through MongoDB, it first needs to be
+# installed using Homebrew and started in the terminal following the 
+# instructions below (work for MacOS). 
+
+# (1) Prerequisites to install MongoDB:
+# (a) Homebrew, instructions are here: https://docs.brew.sh/Installation
+# (b) xcode, example instructions are here: https://www.freecodecamp.org/news/how-to-download-and-install-xcode/. 
+
+# (2) Run the code below in the terminal to install MongoDB.
+brew tap mongodb/brew
+brew update
+brew install mongodb-community@5.0 
+
+# (3) In the terminal still, start the MongoDB server. 
+brew services start mongodb-community@5.0
+
+# (4) Replace the 'start' in the line of code above with 'stop'
+# after you have finished. 
+```
+
+```{r create_mongodb_database, results='hide'}
+
+# (1) Create a new MongoDB database, and a new collection for each directory in this project. 
+collection_helper <- mongo(collection = "00_helper_data", 
+                           db = "youth_democratic_participation_AI")
+
+collection_main_text <- mongo(collection = "01_main_text_data", 
+                              db = "youth_democratic_participation_AI")
+
+collection_secondary_image <- mongo(collection = "02_secondary_image_data", 
+                              db = "youth_democratic_participation_AI")
+
+collection_visualisations <- mongo(collection = "03_visualisations", 
+                              db = "youth_democratic_participation_AI")
+
+# collection_visualisations$remove('{}')
+
+# (2) Add the helper data to the MongoDB database.
+# (a) Add  the tibble with the EU data. 
+eu_tibble_as_list <- as.list(eu_youth_dem_data)
+
+collection_helper$insert(list(
+    content = eu_tibble_as_list,
+    file_name = "eu_youth_dem_data"))
+
+# (b) Add the (uncleaned) EU survey Excel file - required to run this markdown 
+# file and contains relevant code. 
+xlsx_tibble_as_list <- as.list(combined_data)
+
+collection_helper$insert(list(
+    content = xlsx_tibble_as_list,
+    file_name = "eu_youth_democracy_2024"))
+
+# (c) Add the shape file data required to compute the EU youth participation
+# map visualisation. 
+sf_data_as_list <- as.list(sf_data)
+
+collection_helper$insert(list(
+    content = sf_data_as_list,
+    file_name = "sf_data"))
+
+# (d) Add the country index so that the code in this project can be run without
+# any additional scraping. 
+country_index_data <- readRDS(paste0(hdir, "/country_index.rds"))  
+country_index_as_list <- as.list(country_index_data)
+
+collection_helper$insert(list(
+    content = country_index_as_list,
+    file_name = "country_index"
+))
+
+# (3) Add the text_data to the MongoDB database. 
+# List all .txt files in the directory. Added recursive argument to search 
+# .txt files in all subdirectories. 
+text_files <- list.files(tdir, full.names = TRUE, recursive = TRUE)
+
+# Loop through the .txt files.
+for (file in text_files) {
+  
+  # Read the text in the .txt file
+  text_content <- read_file(file)
+  
+  # Extract the subfolder name (e.g., "age_6") and file name (e.g., "Portugal.txt")
+  subfolder <- basename(dirname(file))  
+  file_name <- basename(file) 
+  
+  # Create the new file name (e.g., "age_6_Portugal.txt")
+  new_file_name <- paste0(subfolder, "_", file_name)
+  
+  # Insert the text content as a new document into MongoDB. 
+  collection_main_text$insert(list(
+    content = text_content,
+    file_name = new_file_name 
+  ))
+}
+
+# Check that files were implemented as intended. This should be 27 x 3. 
+collection_main_text$count()
+
+# (4) Add the image data to the MongoDB database. 
+# List all image files in the visualisation data directory and its subdirectories
+image_files <- list.files(vdir, full.names = TRUE, recursive = TRUE)
+
+# Loop through each image file
+for (file in image_files) {
+  
+  # Read the image as binary data
+  image_binary <- readBin(file, what = "raw", n = file.info(file)$size)
+  
+  # Extract the subfolder name (e.g., "age_6") and file name (e.g., "Austria.jpeg")
+  subfolder <- basename(dirname(file))
+  file_name <- basename(file)
+  
+  # Create a new file name combining the subfolder and original file name
+  new_file_name <- paste0(subfolder, "_", file_name)
+  
+  # Insert the image binary data and metadata into MongoDB
+  collection_secondary_image$insert(list(
+    content = image_binary,
+    file_name = new_file_name
+  ))
+}
+
+# (5) Add the  outputs / visualisations created to the MongoDB database. 
+visualisation_files <- list.files(odir, full.names = TRUE)
+
+# Loop through the two files with the output. 
+for (file in visualisation_files) {
+  
+  # Read PDF file as binary data
+  pdf_binary <- readBin(file, what = "raw", n = file.info(file)$size)
+  
+  # Insert the binary data into MongoDB
+  collection_visualisations$insert(list(content = pdf_binary))
+}
+
+# Check that it worked by counting the number of documents.
+collection_visualisations$count()
+
+# Closing the connection to the MongoDB database. 
+# collection$disconnect()
+
+
+
+```
+
+To conclude, both text and visual data are promising because the insights above pointed towards biases in the generated outputs. These data will enable to better understand and quantify such biases, thereby enabling our team at the European Policy Centre to foster future policy improvements and implementations of the EU AI act.
+
+```{r compute_wordcount}
+
+# This code was not written by the student and copied from the course GitHub 
+# repository in line with the instructions in this assignment. 
+
+rmd_file <- paste0(wdir, "/MY472-AT24-final-report.Rmd") # path to your Rmd file
+
+read_file(rmd_file) %>% # read the file as a text file
+  str_squish() %>% # remove all extra white space
+  str_replace("^.+?output.+?[-]{3}", "") %>% # remove header
+  str_replace_all("``` *[{].+?```", " ") %>% # remove code chunks
+  str_replace_all("<![-].+?-->", " ") %>% # remove rmd comments
+  str_replace_all("[!]?\\[.+?\\][(].+?[)]", " ") %>% # remove links
+  str_replace_all("(^|\\s+)[^A-Za-z0-9]+", " ") %>% # remove symbols (1)
+  str_replace_all("[^A-Za-z0-9]+($|\\s+)", " ") %>% # remove symbols (2)
+  str_count("\\S+") %>% 
+  paste("The document is", ., "words.") %>%
+  print()
+
+```
+
+```{r references}
+
+# References:
+# (these were added in a code chunk to comply with the wordcount)
+
+# Houts, P. S., Doak, C. C., Doak, L. G., & Loscalzo, M. J. (2006). The role of pictures in improving health communication: a review of research on attention, comprehension, recall, and adherence.Patient education and counseling, 61(2), 173–190. https://doi.org/10.1016/j.pec.2005.05.004
+
+# Piaget, J. (1962). The stages of the intellectual development of the child. Bulletin of the
+# Menninger Clinic, 26(3), 120–128.
+```
