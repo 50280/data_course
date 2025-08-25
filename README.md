@@ -1,6 +1,7 @@
 # Project Overview
 
 Final grade: Distinction (84)
+[The instructions for this project included producing an html file, knitted from a single .Rmd file. For this reason, all the code for the current project is in a single file.]
 
 ## Primary Contact Information
 
